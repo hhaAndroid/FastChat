@@ -1,0 +1,36 @@
+git clone https://github.com/lm-sys/FastChat.git
+cd FastChat
+pip install -e .
+
+下载 LLAMA 7b HF 权重
+# centos 7 + V100 安装 git lfs
+wget https://packagecloud.io/github/git-lfs/packages/el/7/git-lfs-2.13.2-1.el7.x86_64.rpm/download # 或者直接下载
+sudo rpm -ivh git-lfs-2.13.2-1.el7.x86_64.rpm
+# 下载权重
+git clone https://huggingface.co/decapoda-research/llama-7b-hf
+
+# transformers>=4.28.0 and fschat >= 0.2.0
+
+cd llama-7b-hf
+vim tokenizer_config.json 将 LLaMATokenizer 修改为 LlamaTokenizer
+
+# 7B fp32 模型参数量的存储空间为 4B* 70 亿 = 28 GB 实际下载大概 26 G
+# 所谓的 Low CPU Memory Conversion 是指的将每个大的模型权重文件切分的更小，每次加载小的权重进行合并
+# 因为可能一次加载大模型，这个状态字典就会撑爆 CPU 内存，同时保存的也是一个一个小文件
+python -m fastchat.model.apply_delta \
+    --base /home/huanghaian/llama-7b-hf \
+    --target /home/huanghaian/vicuna-7b \
+    --delta lmsys/vicuna-7b-delta-v1.1 # 这个 delta 权重大概 14G, 脚本自动下载，你也可以自己下载 https://huggingface.co/lmsys
+
+cd /home/huanghaian/vicuna-7b
+将 special_tokens_map.json 换成 https://huggingface.co/lmsys/vicuna-13b-delta-v0/blob/main/special_tokens_map.json 里面的，否则训练和测试停止符不一样，程序会停不下来
+
+# 单 GPU
+python -m fastchat.serve.cli --model-path /home/huanghaian/vicuna-7b
+
+# 8 gpu
+python -m fastchat.serve.cli --model-path /home/huanghaian/vicuna-7b --num-gpus 8 # 需要 torch 大于等于 1.10
+
+# CPU
+python -m fastchat.serve.cli --model-path /home/huanghaian/vicuna-7b --device cpu
+
